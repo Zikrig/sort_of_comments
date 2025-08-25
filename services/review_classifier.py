@@ -10,6 +10,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
 from db.database_manager import DatabaseManager
+from prompts import FEW_SHOT_EXAMPLES
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -23,59 +24,10 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
 # Few-shot примеры для классификации
-FEW_SHOT_EXAMPLES = [
-    """
-Текст: "Отличный тур, всё организовано на высшем уровне, обязательно поеду ещё!"
-Анализ:
-- Жалоба: нет
-- Оценка: 5
-- Причина жалобы: 
-- Поедет во второй раз: да
-""",
-    """
-Текст: "Грязь в номере, еда невкусная, персонал грубый, больше не поеду."
-Анализ:
-- Жалоба: да
-- Оценка: 1
-- Причина жалобы: грязь в номере, невкусная еда, грубый персонал
-- Поедет во второй раз: нет
-""",
-    """
-Текст: "В целом нормально, но экскурсии были скучными. Оценка 3."
-Анализ:
-- Жалоба: да
-- Оценка: 3
-- Причина жалобы: скучные экскурсии
-- Поедет во второй раз: не указано
-""",
-    """
-Текст: "Всё прошло гладко, но ничего выдающегося."
-Анализ:
-- Жалоба: нет
-- Оценка: None
-- Причина жалобы: 
-- Поедет во второй раз: не указано
-""",
-    """
-Текст: "Ужасный сервис, потеряли багаж, оценка 2, не рекомендую!"
-Анализ:
-- Жалоба: да
-- Оценка: 2
-- Причина жалобы: ужасный сервис, потеря багажа
-- Поедет во второй раз: нет
-""",
-    """
-Текст: "Очень понравилось, гид был замечательный, ставлю 5!"
-Анализ:
-- Жалоба: нет
-- Оценка: 5
-- Причина жалобы: 
-- Поедет во второй раз: не указано
-"""
-]
+
 
 class ReviewClassifier:
-    def __init__(self, db_manager: DatabaseManager, batch_size: int = 100):
+    def __init__(self, db_manager: DatabaseManager, batch_size: int = 10):
         self.db_manager = db_manager
         self.batch_size = batch_size
 
@@ -146,7 +98,7 @@ class ReviewClassifier:
         """
         Обработать все отзывы с пагинацией и батчевой классификацией.
         """
-        total_reviews = 40000  # Замените на точное число из r_review
+        total_reviews = 150  # Замените на точное число из r_review
         offset = 0
         all_results = []
         
@@ -205,7 +157,7 @@ async def main():
     classifier = ReviewClassifier(db_manager, batch_size=100)
     results = await classifier.process_all_reviews(update_db=False, output_file="classification_results.json")
     
-    for res in results[:10]:  # Вывод первых 10 результатов
+    for res in results:  # Вывод первых 10 результатов
         print(f"ID отзыва: {res['review_id']}\n"
               f"ID заказа: {res['order_id']}\n"
               f"Текст: '{res['text']}'\n"
