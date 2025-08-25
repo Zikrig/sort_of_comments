@@ -35,20 +35,21 @@ class ReviewClassifier:
         """
         Классифицировать батч текстов с использованием отдельных few-shot промптов для каждого вопроса.
         """
+
         results = []
         
         # Подготовка промптов для каждого вопроса
         complaint_prompts = [(("\n".join(IS_COMPLAINT_PROMPT) + f'\nТекст: "{text}"\nЯвляется ли текст жалобой? ') for text in texts)]
         score_prompts = [(("\n".join(SCORE_PROMPT) + f'\nТекст: "{text}"\nОценка поездки: ') for text in texts)]
         reason_prompts = [(("\n".join(REASON_PROMPT) + f'\nТекст: "{text}"\nПричина жалобы: ') for text in texts)]
-        plan_next_prompts = [(("\n".join(PLAN_NEXT_PROMPT) + f'\nТекст: "{text}"\nПоедет во второй раз: ') for text in texts)]
+        # plan_next_prompts = [(("\n".join(PLAN_NEXT_PROMPT) + f'\nТекст: "{text}"\nПоедет во второй раз: ') for text in texts)]
         
         # Обработка каждого вопроса отдельно
         for prompt_list, key, max_new_tokens in [
             (complaint_prompts, "is_complaint", 10),
             (score_prompts, "score", 10),
             (reason_prompts, "reason", 150),
-            (plan_next_prompts, "plan_next", 10)
+            # (plan_next_prompts, "plan_next", 10)
         ]:
             inputs = tokenizer(prompt_list, return_tensors="pt", padding=True, truncation=True, max_length=512).to(model.device)
             
@@ -73,8 +74,8 @@ class ReviewClassifier:
                     results[i]["score"] = int(answer) if answer.isdigit() else None
                 elif key == "reason":
                     results[i]["reason"] = answer
-                elif key == "plan_next":
-                    results[i]["plan_next"] = True if answer.lower() == "да" else False if answer.lower() == "нет" else None
+                # elif key == "plan_next":
+                #     results[i]["plan_next"] = True if answer.lower() == "да" else False if answer.lower() == "нет" else None
                 results[i]["text"] = texts[i]
         
         return results
@@ -117,11 +118,12 @@ class ReviewClassifier:
             if not reviews:
                 break
                 
-            texts = [review["text"] for review in reviews if review["text"].lower() != "нет отзыва"]
+            texts = [str(review["text"]) for review in reviews if review["text"] is not None and review["text"].lower() != "нет отзыва"]
+
             if not texts:
                 offset += self.batch_size
                 continue
-            
+
             classifications = self.classify_reviews_batch(texts)
             
             text_index = 0
