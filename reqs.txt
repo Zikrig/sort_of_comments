@@ -1,0 +1,5 @@
+sqlalchemy
+asyncio
+asyncmy
+sqlalchemy
+python-dotenv
