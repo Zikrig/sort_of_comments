@@ -42,9 +42,9 @@ class ReviewClassifier:
         results = []
         
         # Подготовка промптов для каждого вопроса
-        complaint_prompts = [(("\n".join(IS_COMPLAINT_PROMPT) + f'\nТекст: "{text}"\nЯвляется ли текст жалобой? ') for text in texts)]
-        score_prompts = [(("\n".join(SCORE_PROMPT) + f'\nТекст: "{text}"\nОценка поездки: ') for text in texts)]
-        reason_prompts = [(("\n".join(REASON_PROMPT) + f'\nТекст: "{text}"\nПричина жалобы: ') for text in texts)]
+        complaint_prompts = [("\n".join(IS_COMPLAINT_PROMPT) + f'\nТекст: "{text}"\nЯвляется ли текст жалобой? ') for text in texts]
+        score_prompts = [("\n".join(SCORE_PROMPT) + f'\nТекст: "{text}"\nОценка поездки: ') for text in texts]
+        reason_prompts = [("\n".join(REASON_PROMPT) + f'\nТекст: "{text}"\nПричина жалобы: ') for text in texts]
         # plan_next_prompts = [(("\n".join(PLAN_NEXT_PROMPT) + f'\nТекст: "{text}"\nПоедет во второй раз: ') for text in texts)]
         
         # Обработка каждого вопроса отдельно
@@ -54,6 +54,12 @@ class ReviewClassifier:
             (reason_prompts, "reason", 150),
             # (plan_next_prompts, "plan_next", 10)
         ]:
+
+            
+        # Дополнительная отладочная информация
+            if not prompt_list:
+                return []
+            
             inputs = tokenizer(prompt_list, return_tensors="pt", padding=True, truncation=True, max_length=512).to(model.device)
             
             with torch.no_grad():
