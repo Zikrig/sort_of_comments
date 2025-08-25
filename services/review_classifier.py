@@ -10,7 +10,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
 from db.database_manager import DatabaseManager
-from prompts import FEW_SHOT_EXAMPLES
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -21,76 +20,82 @@ load_dotenv()
 # Настройка модели
 model_id = "google/gemma-3-270m-it"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
+tokenizer.pad_token_id = tokenizer.eos_token_id  # Устанавливаем pad_token_id
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
-# Few-shot примеры для классификации
-
+# Few-shot промпты (определены выше)
+IS_COMPLAINT_PROMPT = [...]  # Вставьте промпты из предыдущего блока
+SCORE_PROMPT = [...]
+REASON_PROMPT = [...]
+PLAN_NEXT_PROMPT = [...]
 
 class ReviewClassifier:
-    def __init__(self, db_manager: DatabaseManager, batch_size: int = 10):
+    def __init__(self, db_manager: DatabaseManager, batch_size: int = 100):
         self.db_manager = db_manager
         self.batch_size = batch_size
 
     def classify_reviews_batch(self, texts: List[str]) -> List[Dict[str, Any]]:
         """
-        Классифицировать батч текстов с использованием few-shot промпта.
+        Классифицировать батч текстов с использованием отдельных few-shot промптов для каждого вопроса.
         """
         results = []
-        prompts = [("\n".join(FEW_SHOT_EXAMPLES) + f'\nТекст: "{text}"\nАнализ:\n') for text in texts]
-        inputs = tokenizer(prompts, return_tensors="pt", padding=True, truncation=True, max_length=512).to(model.device)
         
-        with torch.no_grad():
-            outputs = model.generate(
-                **inputs,
-                max_new_tokens=100,
-                temperature=0.1,
-                do_sample=False,
-                return_dict_in_generate=True
-            )
+        # Подготовка промптов для каждого вопроса
+        complaint_prompts = [(("\n".join(IS_COMPLAINT_PROMPT) + f'\nТекст: "{text}"\nЯвляется ли текст жалобой? ') for text in texts)]
+        score_prompts = [(("\n".join(SCORE_PROMPT) + f'\nТекст: "{text}"\nОценка поездки: ') for text in texts)]
+        reason_prompts = [(("\n".join(REASON_PROMPT) + f'\nТекст: "{text}"\nПричина жалобы: ') for text in texts)]
+        plan_next_prompts = [(("\n".join(PLAN_NEXT_PROMPT) + f'\nТекст: "{text}"\nПоедет во второй раз: ') for text in texts)]
         
-        for i, output in enumerate(outputs.sequences):
-            generated_text = tokenizer.decode(output, skip_special_tokens=True)
-            analysis_part = generated_text[len(prompts[i]):].strip()
-            parsed = self.parse_analysis(analysis_part)
-            results.append({
-                "text": texts[i],
-                "is_complaint": parsed.get("complaint", False),
-                "score": parsed.get("score", None),
-                "reason": parsed.get("reason", ""),
-                "plan_next": parsed.get("plan_next", None)
-            })
+        # Обработка каждого вопроса отдельно
+        for prompt_list, key, max_new_tokens in [
+            (complaint_prompts, "is_complaint", 10),
+            (score_prompts, "score", 10),
+            (reason_prompts, "reason", 150),
+            (plan_next_prompts, "plan_next", 10)
+        ]:
+            inputs = tokenizer(prompt_list, return_tensors="pt", padding=True, truncation=True, max_length=512).to(model.device)
+            
+            with torch.no_grad():
+                outputs = model.generate(
+                    **inputs,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    return_dict_in_generate=True
+                )
+            
+            for i, output in enumerate(outputs.sequences):
+                generated_text = tokenizer.decode(output, skip_special_tokens=True)
+                answer = generated_text[len(prompt_list[i]):].strip()
+                
+                if not results:
+                    results = [{} for _ in texts]
+                
+                if key == "is_complaint":
+                    results[i]["is_complaint"] = answer.lower() == "да"
+                elif key == "score":
+                    results[i]["score"] = int(answer) if answer.isdigit() else None
+                elif key == "reason":
+                    results[i]["reason"] = answer
+                elif key == "plan_next":
+                    results[i]["plan_next"] = True if answer.lower() == "да" else False if answer.lower() == "нет" else None
+                results[i]["text"] = texts[i]
         
         return results
-
-    def parse_analysis(self, analysis_text: str) -> Dict[str, Any]:
-        """
-        Парсер для извлечения полей из сгенерированного текста.
-        """
-        lines = analysis_text.split("\n")
-        parsed = {}
-        for line in lines:
-            if line.startswith("- Жалоба:"):
-                parsed["complaint"] = line.split(":")[1].strip().lower() == "да"
-            elif line.startswith("- Оценка:"):
-                score_str = line.split(":")[1].strip()
-                parsed["score"] = int(score_str) if score_str.isdigit() else None
-            elif line.startswith("- Причина жалобы:"):
-                parsed["reason"] = line.split(":")[1].strip()
-            elif line.startswith("- Поедет во второй раз:"):
-                val = line.split(":")[1].strip().lower()
-                parsed["plan_next"] = True if val == "да" else False if val == "нет" else None
-        return parsed
 
     async def map_reason_to_complaint_types(self, reason: str) -> List[int]:
         """
         Сопоставить причину жалобы с типами жалоб из r_complaint_type.
         """
         complaint_type_mapping = {
-            "грязь": 1,  # Пример ID для "грязь в номере"
-            "еда": 2,    # Пример ID для "невкусная еда"
-            "сервис": 3, # Пример ID для "плохой сервис"
-            "гид": 4,    # Пример ID для "проблемы с гидом"
-            "экскурсии": 5  # Пример ID для "скучные экскурсии"
+            "грязь": 1,       # Грязь в номере/гостинице
+            "еда": 2,         # Проблемы с питанием
+            "сервис": 3,      # Плохое обслуживание
+            "гид": 4,         # Проблемы с гидом/экскурсоводом
+            "экскурсии": 5,   # Скучные/плохо организованные экскурсии
+            "автобус": 6,     # Проблемы с автобусом
+            "гостиница": 7,   # Проблемы с гостиницей (кроме грязи)
+            "банкет": 8,      # Проблемы с банкетом
+            "логистика": 9    # Проблемы с маршрутом/расписанием
         }
         return [complaint_type_mapping[word] for word in complaint_type_mapping if word.lower() in reason.lower()]
 
@@ -98,54 +103,83 @@ class ReviewClassifier:
         """
         Обработать все отзывы с пагинацией и батчевой классификацией.
         """
-        total_reviews = 150  # Замените на точное число из r_review
+        total_reviews = 40000  # Замените на точное число из r_review
         offset = 0
         all_results = []
         
+        # Загрузка существующих результатов для возобновления
+        if output_file and os.path.exists(output_file):
+            with open(output_file, "r", encoding="utf-8") as f:
+                all_results = json.load(f)
+            offset = len(all_results)
+            logger.info(f"Возобновление с offset={offset}")
+
         while offset < total_reviews:
             logger.info(f"Обработка отзывов с {offset} по {offset + self.batch_size}")
             reviews = await self.db_manager.get_all_reviews(offset=offset, limit=self.batch_size)
             if not reviews:
                 break
                 
-            texts = [review["text"] for review in reviews]
+            texts = [review["text"] for review in reviews if review["text"].lower() != "нет отзыва"]
+            if not texts:
+                offset += self.batch_size
+                continue
+            
             classifications = self.classify_reviews_batch(texts)
             
-            for review, classification in zip(reviews, classifications):
-                result = {
-                    "review_id": review["review_id"],
-                    "text": review["text"],
-                    "is_complaint": classification["is_complaint"],
-                    "score": classification["score"],
-                    "reason": classification["reason"],
-                    "plan_next": classification["plan_next"],
-                    "order_id": review["order_id"],
-                    "current_score": review["current_score"],
-                    "current_complaint": review["current_complaint"],
-                    "current_plan_next": review["current_plan_next"]
-                }
+            text_index = 0
+            for review in reviews:
+                if review["text"].lower() == "нет отзыва":
+                    result = {
+                        "review_id": review["review_id"],
+                        "text": review["text"],
+                        "is_complaint": False,
+                        "score": 0,
+                        "reason": "нет",
+                        "plan_next": None,
+                        "order_id": review["order_id"],
+                        "current_score": review["current_score"],
+                        "current_complaint": review["current_complaint"],
+                        "current_plan_next": review["current_plan_next"]
+                    }
+                else:
+                    classification = classifications[text_index]
+                    result = {
+                        "review_id": review["review_id"],
+                        "text": review["text"],
+                        "is_complaint": classification["is_complaint"],
+                        "score": classification["score"],
+                        "reason": classification["reason"],
+                        "plan_next": classification["plan_next"],
+                        "order_id": review["order_id"],
+                        "current_score": review["current_score"],
+                        "current_complaint": review["current_complaint"],
+                        "current_plan_next": review["current_plan_next"]
+                    }
+                    text_index += 1
+                
                 all_results.append(result)
                 
                 if update_db and review["order_id"]:
                     try:
-                        complaint_types = await self.map_reason_to_complaint_types(classification["reason"])
+                        complaint_types = await self.map_reason_to_complaint_types(result["reason"])
                         await self.db_manager.create_or_update_order(
                             order_id=review["order_id"],
-                            score=classification["score"] or review["current_score"],
-                            complaint=classification["is_complaint"] or review["current_complaint"],
-                            plan_next=classification["plan_next"] or review["current_plan_next"],
+                            score=result["score"] or review["current_score"],
+                            complaint=result["is_complaint"] or review["current_complaint"],
+                            plan_next=result["plan_next"] or review["current_plan_next"],
                             review_text=review["text"],
                             complaint_types=complaint_types
                         )
                     except Exception as e:
                         logger.error(f"Ошибка при обновлении заказа {review['order_id']}: {e}")
             
+            # Сохранение промежуточных результатов
+            if output_file:
+                with open(output_file, "w", encoding="utf-8") as f:
+                    json.dump(all_results, f, ensure_ascii=False, indent=2)
+            
             offset += self.batch_size
-        
-        # Сохранение результатов в файл, если указан
-        if output_file:
-            with open(output_file, "w", encoding="utf-8") as f:
-                json.dump(all_results, f, ensure_ascii=False, indent=2)
         
         return all_results
 
@@ -157,7 +191,7 @@ async def main():
     classifier = ReviewClassifier(db_manager, batch_size=100)
     results = await classifier.process_all_reviews(update_db=False, output_file="classification_results.json")
     
-    for res in results:  # Вывод первых 10 результатов
+    for res in results[:10]:  # Вывод первых 10 результатов
         print(f"ID отзыва: {res['review_id']}\n"
               f"ID заказа: {res['order_id']}\n"
               f"Текст: '{res['text']}'\n"
