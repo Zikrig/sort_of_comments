@@ -24,10 +24,7 @@ tokenizer.pad_token_id = tokenizer.eos_token_id  # Устанавливаем pa
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
 # Few-shot промпты (определены выше)
-IS_COMPLAINT_PROMPT = [...]  # Вставьте промпты из предыдущего блока
-SCORE_PROMPT = [...]
-REASON_PROMPT = [...]
-PLAN_NEXT_PROMPT = [...]
+from prompts import *
 
 class ReviewClassifier:
     def __init__(self, db_manager: DatabaseManager, batch_size: int = 100):
@@ -87,15 +84,15 @@ class ReviewClassifier:
         Сопоставить причину жалобы с типами жалоб из r_complaint_type.
         """
         complaint_type_mapping = {
-            "грязь": 1,       # Грязь в номере/гостинице
-            "еда": 2,         # Проблемы с питанием
-            "сервис": 3,      # Плохое обслуживание
-            "гид": 4,         # Проблемы с гидом/экскурсоводом
-            "экскурсии": 5,   # Скучные/плохо организованные экскурсии
-            "автобус": 6,     # Проблемы с автобусом
-            "гостиница": 7,   # Проблемы с гостиницей (кроме грязи)
-            "банкет": 8,      # Проблемы с банкетом
-            "логистика": 9    # Проблемы с маршрутом/расписанием
+            "автобус": 1,
+            "питание": 2,
+            "отель": 3,
+            "гид": 4,
+            "экскурсовод на месте": 5,
+            "программа тура": 6,
+            "сервис": 7,
+            "логистика": 8,
+            "другое": 9
         }
         return [complaint_type_mapping[word] for word in complaint_type_mapping if word.lower() in reason.lower()]
 
@@ -103,7 +100,7 @@ class ReviewClassifier:
         """
         Обработать все отзывы с пагинацией и батчевой классификацией.
         """
-        total_reviews = 40000  # Замените на точное число из r_review
+        total_reviews = 200
         offset = 0
         all_results = []
         
