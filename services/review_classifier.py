@@ -144,7 +144,7 @@ class ReviewClassifier:
                         "is_complaint": False,
                         "score": 0,
                         "reason": "нет",
-                        "plan_next": None,
+                        # "plan_next": None,
                         "order_id": review["order_id"],
                         "current_score": review["current_score"],
                         "current_complaint": review["current_complaint"],
@@ -158,7 +158,7 @@ class ReviewClassifier:
                         "is_complaint": classification["is_complaint"],
                         "score": classification["score"],
                         "reason": classification["reason"],
-                        "plan_next": classification["plan_next"],
+                        # "plan_next": classification["plan_next"],
                         "order_id": review["order_id"],
                         "current_score": review["current_score"],
                         "current_complaint": review["current_complaint"],
@@ -175,7 +175,7 @@ class ReviewClassifier:
                             order_id=review["order_id"],
                             score=result["score"] or review["current_score"],
                             complaint=result["is_complaint"] or review["current_complaint"],
-                            plan_next=result["plan_next"] or review["current_plan_next"],
+                            # plan_next=result["plan_next"] or review["current_plan_next"],
                             review_text=review["text"],
                             complaint_types=complaint_types
                         )
@@ -206,7 +206,7 @@ async def main():
               f"Жалоба: {res['is_complaint']}\n"
               f"Оценка: {res['score']}\n"
               f"Причина: {res['reason']}\n"
-              f"Поедет еще: {res['plan_next']}\n"
+            #   f"Поедет еще: {res['plan_next']}\n"
               f"Текущие данные: score={res['current_score']}, complaint={res['current_complaint']}, plan_next={res['current_plan_next']}\n"
               f"{'-'*70}")
 
