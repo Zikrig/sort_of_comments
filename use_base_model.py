@@ -1,7 +1,6 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
-from train_data import examples, examples_to_teach, test_texts, neutral_but_risky_phrases
 
 model_id = "google/gemma-3-270m-it"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
