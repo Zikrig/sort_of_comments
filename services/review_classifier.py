@@ -5,6 +5,8 @@ from typing import List, Dict, Any, Optional
 import logging
 from tqdm.asyncio import tqdm_asyncio
 
+from db.models import Base, RRating, RReview, RComplaintType, RRatingToComplaintType
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
@@ -76,11 +78,11 @@ FEW_SHOT_EXAMPLES = [
 ]
 
 class ReviewClassifier:
-    def __init__(self, db_manager: DatabaseManager, batch_size: int = 100):
+    def __init__(self, db_manager: DatabaseManager, batch_size: int = 10):
         self.db_manager = db_manager
         self.batch_size = batch_size
 
-    async def get_all_reviews(self, offset: int = 0, limit: int = 1000) -> List[Dict[str, Any]]:
+    async def get_all_reviews(self, offset: int = 0, limit: int = 10) -> List[Dict[str, Any]]:
         """
         Получить отзывы из таблицы r_review с пагинацией.
         """
@@ -158,7 +160,7 @@ class ReviewClassifier:
         """
         Обработать все отзывы с пагинацией и батчевой классификацией.
         """
-        total_reviews = 40000  # Можно заменить на точное число из БД
+        total_reviews = 40
         offset = 0
         all_results = []
         

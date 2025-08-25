@@ -15,7 +15,7 @@ async def main():
     classifier = ReviewClassifier(db_manager, batch_size=100)
     results = await classifier.process_all_reviews(update_db=False)
     
-    for res in results[:10]:  # Выводим первые 10 результатов для примера
+    for res in results:  # Выводим первые 10 результатов для примера
         print(f"ID отзыва: {res['review_id']}\n"
               f"Текст: '{res['text']}'\n"
               f"Жалоба: {res['is_complaint']}\n"
