@@ -24,6 +24,29 @@ class DatabaseManager:
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
     
+    async def get_all_reviews(self, offset: int = 0, limit: int = 1000) -> List[Dict[str, Any]]:
+        """
+        Получить все отзывы из таблицы r_review с непустым текстом, с пагинацией.
+        """
+        async with self.async_session() as session:
+            stmt = select(RReview).options(
+                selectinload(RReview.rating)
+            ).where(RReview.text.isnot(None)).offset(offset).limit(limit)
+            result = await session.execute(stmt)
+            reviews = result.scalars().all()
+            
+            return [
+                {
+                    "review_id": review.id,
+                    "text": review.text,
+                    "rating_id": review.rating_id,
+                    "order_id": review.rating.orderId if review.rating else None,
+                    "current_score": review.rating.score if review.rating else None,
+                    "current_complaint": review.rating.complaint if review.rating else None,
+                    "current_plan_next": review.rating.planNext if review.rating else None
+                }
+                for review in reviews
+            ]
 
     async def get_order_data(self, order_id: int) -> Optional[Dict[str, Any]]:
         """Получить все данные по конкретному заказу"""
