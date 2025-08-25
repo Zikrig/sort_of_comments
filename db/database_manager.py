@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy import select, update, insert
 from typing import Optional, List, Dict, Any
+from sqlalchemy.orm import selectinload
 
 from db.models import Base, RRating, RReview, RComplaintType, RRatingToComplaintType
 
@@ -23,12 +24,16 @@ class DatabaseManager:
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
     
+
     async def get_order_data(self, order_id: int) -> Optional[Dict[str, Any]]:
         """Получить все данные по конкретному заказу"""
         async with self.async_session() as session:
             try:
-                # Находим рейтинг по orderId
-                stmt = select(RRating).where(RRating.orderId == order_id)
+                # Находим рейтинг по orderId с подгрузкой связанных данных
+                stmt = select(RRating).where(RRating.orderId == order_id).options(
+                    selectinload(RRating.review),
+                    selectinload(RRating.complaint_types).selectinload(RRatingToComplaintType.complaint_type)
+                )
                 result = await session.execute(stmt)
                 rating = result.scalar_one_or_none()
                 
@@ -66,7 +71,7 @@ class DatabaseManager:
             except Exception as e:
                 await session.rollback()
                 raise e
-    
+
     async def create_or_update_order(
         self, 
         order_id: int, 
