@@ -18,7 +18,7 @@ async def main():
     await db_manager.init_models()
     
     # Пример: получение данных заказа
-    order_data = await db_manager.get_order_data(335764)
+    order_data = await db_manager.get_order_data(315185)
     print("Данные заказа:", order_data)
     
     # Пример: добавление нового заказа
