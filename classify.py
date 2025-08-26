@@ -13,7 +13,7 @@ async def main():
     await db_manager.init_models()
     
     classifier = ReviewClassifier(db_manager, batch_size=30)
-    results = await classifier.process_all_reviews(update_db=False, output_file='test.json')
+    results = await classifier.process_all_reviews(save_to_file=True)
     
 
 if __name__ == "__main__":
