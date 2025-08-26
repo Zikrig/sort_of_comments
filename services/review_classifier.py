@@ -10,8 +10,11 @@ from pathlib import Path
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
+import re
+from time import sleep
 
 from db.database_manager import DatabaseManager
+from prompts import *
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -24,9 +27,6 @@ model_id = "google/gemma-3-270m-it"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 tokenizer.pad_token_id = tokenizer.eos_token_id
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
-
-# Few-shot промпты
-from prompts import *
 
 class ReviewClassifier:
     def __init__(self, db_manager: DatabaseManager, batch_size: int = 100):
@@ -50,40 +50,75 @@ class ReviewClassifier:
         reason_prompts = [("\n".join(REASON_PROMPT) + f'\nТекст: "{text}"\nПричина жалобы: ') for text in texts]
         
         # Обработка каждого вопроса отдельно
-        for prompt_list, key, max_new_tokens in [
-            (complaint_prompts, "is_complaint", 10),
-            (score_prompts, "score", 10),
-            (reason_prompts, "reason", 150),
+        for prompt_list, key, max_new_tokens, requiest_sentence in [
+            (complaint_prompts, "is_complaint", 10, 'Является ли текст жалобой? '),
+            (score_prompts, "score", 10, 'Оценка поездки: '),
+            (reason_prompts, "reason", 150, 'Причина жалобы: '),
         ]:
             if not prompt_list:
                 return []
-            
-            inputs = tokenizer(prompt_list, return_tensors="pt", padding=True, truncation=True, max_length=512).to(model.device)
-            
+                        
+            max_ctx = getattr(model.config, "max_position_embeddings", 2048)
+            tokenizer_max = min( max_ctx, 2048 )
+
+            inputs = tokenizer(
+                prompt_list,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=tokenizer_max
+            ).to(model.device)
+
+            # посчитаем реальные длины входов (чтобы потом отрезать prompt из полного sequence)
+            input_lengths = inputs['attention_mask'].sum(dim=1).tolist()
+
             with torch.no_grad():
                 outputs = model.generate(
-                    **inputs,
+                    **{k: inputs[k] for k in ("input_ids", "attention_mask")},
                     max_new_tokens=max_new_tokens,
                     do_sample=False,
                     return_dict_in_generate=True
                 )
-            
-            for i, output in enumerate(outputs.sequences):
-                generated_text = tokenizer.decode(output, skip_special_tokens=True)
-                answer = generated_text[len(prompt_list[i]):].strip()
-                
+
+            for i, seq in enumerate(outputs.sequences):
+                # отрежем именно сгенерированные токены
+                in_len = int(input_lengths[i])
+                gen_ids = seq[in_len:].to('cpu')
+                gen_text = tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
+                print(gen_text)
+
+                # fallback: если вдруг пусто — декодируем всю последовательность и вычитаем prompt
+                if not gen_text:
+                    full = tokenizer.decode(seq, skip_special_tokens=True)
+                    gen_text = full.replace(prompt_list[i], "").strip()
+                    print('AAALLL')
+
+                # более устойчивый парсинг
                 if not results:
                     results = [{} for _ in texts]
-                
+
                 if key == "is_complaint":
-                    results[i]["is_complaint"] = answer.lower() == "да"
+                    # ищем отдельное слово "да" или "нет"
+                    if re.search(r'\bда\b', gen_text, re.I):
+                        results[i]["is_complaint"] = True
+                    elif re.search(r'\bнет\b', gen_text, re.I):
+                        results[i]["is_complaint"] = False
+                    else:
+                        # неопределённо — можно поставить None или сделать эвристику
+                        results[i]["is_complaint"] = False
+
                 elif key == "score":
-                    results[i]["score"] = int(answer) if answer.isdigit() else None
+                    m = re.search(r'(-?\d+)', gen_text)
+                    results[i]["score"] = int(m.group(1)) if m else None
+
                 elif key == "reason":
-                    results[i]["reason"] = answer
+                    # не трогаем — просто текст причины
+                    results[i]["reason"] = gen_text
+
                 results[i]["text"] = texts[i]
-        
+
         return results
+
 
     async def map_reason_to_complaint_types(self, reason: str) -> List[int]:
         """
