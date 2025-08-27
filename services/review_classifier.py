@@ -45,9 +45,9 @@ class ReviewClassifier:
         results = []
         
         # Подготовка промптов для каждого вопроса
-        complaint_prompts = [("\n".join(IS_COMPLAINT_PROMPT) + f'\nТекст: "{text}"\nЯвляется ли текст жалобой? ') for text in texts]
-        score_prompts = [("\n".join(SCORE_PROMPT) + f'\nТекст: "{text}"\nОценка поездки: ') for text in texts]
-        reason_prompts = [("\n".join(REASON_PROMPT) + f'\nТекст: "{text}"\nПричина жалобы: ') for text in texts]
+        complaint_prompts = [("\n".join(IS_COMPLAINT_PROMPT) + f'\nТекст: "{text}"\nЯвляется ли текст жалобой? (ОТВЕТЬ ТОЛЬКО Да или Нет)') for text in texts]
+        score_prompts = [("\n".join(SCORE_PROMPT) + f'\nТекст: "{text}"\nОценка поездки: (ОТВЕТЬ ТОЛЬКО ЧИСЛОМ ОТ 1 ДО 5)') for text in texts]
+        reason_prompts = [("\n".join(REASON_PROMPT) + f'\nТекст: "{text}"\nПричина жалобы: (ответь только словами через запятую из этого набора  (автобус, питание, отель, гид, экскурсовод на месте, программа тура, сервис, логистика, другое))') for text in texts]
         
         # Обработка каждого вопроса отдельно
         for prompt_list, key, max_new_tokens, requiest_sentence in [
