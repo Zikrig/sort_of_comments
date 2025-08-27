@@ -1,5 +1,5 @@
-from services.complain_model_trainer import TextModelTrainer
-from services.complain_model_predictor import TextModelPredictor
+from services.text_model_trainer import TextModelTrainer
+from services.text_model_predictor import TextModelPredictor
 
 
 trainer = TextModelTrainer("data/dataset.csv")

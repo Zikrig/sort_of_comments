@@ -19,12 +19,20 @@ dataset_path = "data/dataset.csv"
 # print(f"Модель сохранена в {save_path}")
 
 predictor = ScorePredictor(
-    model_path="models/score_00/model.pkl",
-    vectorizer_path="models/score_00/vectorizer.pkl"
+    model_path="models/score/model.pkl",
+    vectorizer_path="models/score/vectorizer.pkl"
 )
-df = pd.read_csv(dataset_path)
-df_result = predictor.predict_dataframe(df, text_column="text")
+# df = pd.read_csv(dataset_path)
+# df_result = predictor.predict_dataframe(df, text_column="text")
 
-output_path = "data/dataset_with_predictions.csv"
-df_result.to_csv(output_path, index=False, encoding="utf-8")
-print(f"Результат сохранён в {output_path}")
+# output_path = "data/dataset_with_predictions.csv"
+# df_result.to_csv(output_path, index=False, encoding="utf-8")
+# print(f"Результат сохранён в {output_path}")
+
+text = '''Отзыв: гид Галина Николаевна полное безобразие: 4 часа всю дорогу громко в микрофон трындела не по делу: про ее дочь в Китае, про мужа, сестру, про её друзей, про ее важные знакомства, про ее навыки фотографа, что она -лучший гид, такая популярная, фантазировала на свои личные темы и выдавала очень много ненужной информации, говорила где что купить-рекламировала конкретные места, ноль информации по делу про историю: зато обругала учителей, что детей ничему не учат и тп(а турист-преподаватель)
+Гид Вела себя как будто на междусобойчике. 
+В конце спросила об их мнении о ней и просила оставить отзыв.
+Город, экскурсия и туроператор - хорошие, но гид не квалифицированный. 
+Отзыв от Татьяны: Бывалый наш турист, ездила сама и со своими учениками. 
+Настойчиво просит замену гида.'''
+print(predictor.predict_text(text))

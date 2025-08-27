@@ -3,11 +3,14 @@ import joblib
 import os
 import string
 import re
+import math
 
 # Препроцессор
 def clean_text(text: str) -> str:
     text = str(text).lower()
     text = re.sub(f"[{re.escape(string.punctuation)}]", " ", text)
+    if len(text) < 100:
+        text *= 3
     return text
 
 class ScorePredictor:
@@ -15,12 +18,21 @@ class ScorePredictor:
         self.model = joblib.load(model_path)
         self.vectorizer = joblib.load(vectorizer_path)
 
+    def _custom_round(self, value: float) -> int:
+        """Кастомное округление: до 0.75 вниз, от 0.75 вверх"""
+        fractional = value - math.floor(value)
+        if fractional < 0.75:
+            return math.floor(value)
+        else:
+            return math.ceil(value)
+        
     def predict_text(self, text: str) -> int:
         """Предсказание score для одной строки"""
         vec = self.vectorizer.transform([text])
         pred = self.model.predict(vec)
         # Ограничение диапазона 0-5
-        pred_score = max(0, min(5, int(round(pred[0]))))
+        # print(pred[0])
+        pred_score = max(0, min(5, int(self._custom_round(pred[0]))))
         return pred_score
 
     def predict_dataframe(self, df: pd.DataFrame, text_column: str = "text") -> pd.DataFrame:
